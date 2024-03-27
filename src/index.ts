@@ -1,23 +1,23 @@
-import express from "express";
+import express, { Express, Request, Response } from "express";
 import dotenv from "dotenv";
 import cors from "cors";
+import nodemailer from "nodemailer";
+import { applicantRouter } from "./routes/applicant";
+
 dotenv.config();
 
-const app = express();
+const app: Express = express();
 app.use(express.json({ limit: "30mb" }));
 const corsOpts = {
   origin: "*",
-
   methods: ["GET", "POST"],
 };
 
 app.use(cors(corsOpts));
 app.use(express.urlencoded({ extended: true, limit: "30mb" }));
+app.use("/apply", applicantRouter);
 
-app.use("/", (req, res) => {
-  res.send({ answer: "Workin' fine" });
-});
-const PORT = 8000;
+const PORT: number = parseInt(process.env.PORT as string, 10) || 8000;
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
