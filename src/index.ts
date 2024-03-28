@@ -14,9 +14,7 @@ const corsOpts = {
   origin: "*",
   methods: ["GET", "POST"],
 };
-const MONGODB_URL =
-  process.env.MONGODB_URL ||
-  "mongodb+srv://yaya:DSoIRrjAbtv7f9bY@cluster0.1zjogmo.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+const MONGODB_URL = process.env.MONGODB_URL!;
 
 mongoose.set("strictQuery", true);
 mongoose
@@ -35,5 +33,5 @@ app.use("/contact", contactRouter);
 
 const PORT: number = parseInt(process.env.PORT as string, 10) || 8000;
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server running on ${PORT}`);
 });

@@ -12,7 +12,7 @@ export async function uploadFile(file: Express.Multer.File) {
         headers: {
           ...form.getHeaders(),
           Authorization: `Basic ${Buffer.from(
-            `p123881157f0053d1990c36d89b1373bb:se275efd6802752e62f26daef4a96d332`
+            `${process.env.CDN_TOKEN}:${process.env.CDN_SECRET}`
           ).toString("base64")}`,
         },
       }
