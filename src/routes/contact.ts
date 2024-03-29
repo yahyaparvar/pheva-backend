@@ -26,6 +26,6 @@ contactRouter.post("/", upload.single("attachment"), async (req, res) => {
     await newContact.save();
     res.json({ created: newContact });
   } catch (error) {
-    res.json({ error: error });
+    res.status(401).json({ error: error });
   }
 });

@@ -1,7 +1,6 @@
 import express, { Express, Request, Response } from "express";
 import dotenv from "dotenv";
 import cors from "cors";
-import nodemailer from "nodemailer";
 import { applicantRouter } from "./routes/applicant";
 import { mongoose } from "@typegoose/typegoose";
 import { contactRouter } from "./routes/contact";
@@ -20,10 +19,10 @@ mongoose.set("strictQuery", true);
 mongoose
   .connect(MONGODB_URL)
   .then(() => {
-    console.log(`Connected to MongoDB and here is the url: ${MONGODB_URL}`);
+    console.log(`Connected to database`);
   })
   .catch((error: Error) => {
-    console.log("Could not connect to database", "sek");
+    console.log("Could not connect to database", error);
   });
 
 app.use(cors(corsOpts));

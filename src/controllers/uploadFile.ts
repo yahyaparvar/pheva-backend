@@ -1,6 +1,5 @@
 import axios from "axios";
 import FormData from "form-data";
-
 export async function uploadFile(file: Express.Multer.File) {
   const form = new FormData();
   form.append("file", file.buffer, file.originalname);
