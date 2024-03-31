@@ -20,7 +20,9 @@ applicantRouter.post("/", upload.single("cv"), async (req, res) => {
     applicantData = {
       ...bodyData,
       cv: cvUrl,
+      skills: (bodyData.skills = JSON.parse(bodyData.skills)),
     };
+    console.log(bodyData);
 
     const newApplicant = new ApplicantModel(applicantData);
     await newApplicant.save();
