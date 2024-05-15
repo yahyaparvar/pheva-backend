@@ -1,36 +1,37 @@
-import express, { Express, Request, Response } from "express";
-import dotenv from "dotenv";
-import cors from "cors";
-import { applicantRouter } from "./routes/applicant";
-import { mongoose } from "@typegoose/typegoose";
-import { contactRouter } from "./routes/contact";
+import express, { Request, Response } from 'express';
+import axios from 'axios';
+import bodyParser from 'body-parser';
 
-dotenv.config();
+const app = express();
+app.use(bodyParser.json());
 
-const app: Express = express();
-app.use(express.json({ limit: "30mb" }));
-const corsOpts = {
-  origin: "*",
-  methods: ["GET", "POST"],
-};
-const MONGODB_URL = process.env.MONGODB_URL!;
+interface GoogleAuthRequest extends Request {
+  body: {
+    code: string;
+  };
+}
 
-mongoose.set("strictQuery", true);
-mongoose
-  .connect(MONGODB_URL)
-  .then(() => {
-    console.log(`Connected to database`);
-  })
-  .catch((error: Error) => {
-    console.log("Could not connect to database", error);
-  });
+app.post('/auth/google', async (req: GoogleAuthRequest, res: Response) => {
+  const { code } = req.body;
 
-app.use(cors(corsOpts));
-app.use(express.urlencoded({ extended: true, limit: "30mb" }));
-app.use("/apply", applicantRouter);
-app.use("/contact", contactRouter);
+  try {
+    const response = await axios.post('https://oauth2.googleapis.com/token', null, {
+      params: {
+        code,
+        client_id: 'YOUR_GOOGLE_CLIENT_ID',
+        client_secret: 'YOUR_GOOGLE_CLIENT_SECRET',
+        redirect_uri: 'YOUR_REDIRECT_URI',
+        grant_type: 'authorization_code',
+      },
+    });
 
-const PORT: number = parseInt(process.env.PORT as string, 10) || 8000;
+    res.json(response.data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`Server running on ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
