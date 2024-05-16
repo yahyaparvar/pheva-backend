@@ -55,7 +55,7 @@ app.post("/auth/google", async (req: AuthRequest, res: Response) => {
 
 // New route to fetch Gmail inbox using the access token provided by the client
 app.get("/emails/inbox", async (req: Request, res: Response) => {
-  const accessToken = req.headers.authorization?.split(" ")[1]; // Bearer <token>
+  const accessToken = req.headers.authorization?.split(" ")[1];
 
   try {
     const listResponse = await axios.get(
