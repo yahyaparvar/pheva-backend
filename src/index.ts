@@ -1,8 +1,8 @@
-import axios, { AxiosResponse } from "axios";
 import cors from "cors";
 import dotenv from "dotenv";
-import express, { Request, Response } from "express";
-import { parseMultipartResponse } from "./utils";
+import express from "express";
+import { authRouter } from "./routes/auth/auth";
+import { emailRouter } from "./routes/emails";
 
 dotenv.config(); // Load environment variables from .env file
 
@@ -16,167 +16,13 @@ const corsOpts = {
 
 app.use(cors(corsOpts));
 
-interface AuthRequest extends Request {
-  body: {
-    code: string;
-  };
-}
-
-interface EmailRequest extends Request {
-  headers: {
-    authorization: string;
-  };
-}
-
-interface Email {
-  id: string;
-  sender: string;
-  snippet: string;
-  subject: string;
-  date: string;
-  labels: string[];
-}
-
-interface EmailResponse {
-  emails: Email[];
-  nextPageToken: string | undefined;
-  resultSizeEstimate: number;
-}
-
 // Route to exchange authorization code for access token
-app.post("/auth/google", async (req: AuthRequest, res: Response) => {
-  const { code } = req.body;
-
-  try {
-    const response = await axios.post(
-      "https://oauth2.googleapis.com/token",
-      null,
-      {
-        params: {
-          code,
-          client_id: process.env.GOOGLE_CLIENT_ID,
-          client_secret: process.env.GOOGLE_CLIENT_SECRET,
-          redirect_uri: process.env.REDIRECT_URI,
-          grant_type: "authorization_code",
-        },
-      }
-    );
-
-    res.json(response.data);
-  } catch (error) {
-    console.error("OAuth error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+app.use("/auth", authRouter);
 
 // Route to fetch Gmail inbox using the access token provided by the client
-app.get("/emails/inbox", async (req: Request, res: Response) => {
-  const accessToken = (req as EmailRequest).headers.authorization?.split(
-    " "
-  )[1];
-  const pageToken = req.query.pageToken as string | undefined;
-
-  try {
-    const cacheKey = `pageToken:${pageToken}`;
-    const listResponse = await axios.get(
-      "https://gmail.googleapis.com/gmail/v1/users/me/messages",
-      {
-        params: {
-          maxResults: 50,
-          pageToken: pageToken || undefined,
-        },
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: "application/json",
-        },
-      }
-    );
-
-    const messageIds: string[] = listResponse.data.messages.map(
-      (message: any) => message.id
-    );
-
-    // Fetch email details in batch from Gmail API
-    const emailDetails = await fetchBatchEmailDetails(accessToken, messageIds);
-
-    const result: EmailResponse = {
-      emails: emailDetails,
-      nextPageToken: listResponse.data.nextPageToken,
-      resultSizeEstimate: listResponse.data.resultSizeEstimate,
-    };
-
-    res.json(result);
-  } catch (error) {
-    console.error("Gmail API error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+app.use("/emails", emailRouter);
 
 // Fetch email details in batch from Gmail API
-const fetchBatchEmailDetails = async (
-  accessToken: string,
-  emailIds: string[]
-): Promise<Email[]> => {
-  const boundary = "batch_boundary";
-
-  const body =
-    emailIds
-      .map((id) => {
-        return [
-          `--${boundary}`,
-          "Content-Type: application/http",
-          "",
-          `GET /gmail/v1/users/me/messages/${id}?fields=id,labelIds,snippet,payload(headers)`,
-          "",
-        ].join("\r\n");
-      })
-      .join("\r\n") + `\r\n--${boundary}--`;
-
-  const response: AxiosResponse<any> = await axios.post(
-    "https://www.googleapis.com/batch/gmail/v1",
-    body,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": `multipart/mixed; boundary=${boundary}`,
-      },
-    }
-  );
-
-  // Log the raw response for debugging
-  const rawResponse = response.data;
-  console.log("Raw batch response:", rawResponse);
-
-  // Parse the raw response and extract email details
-  const emailDetails = parseMultipartResponse(rawResponse)
-    .map((message: any) => {
-      if (!message.payload || !message.payload.headers) {
-        console.error("Missing payload or headers in message:", message);
-        return null;
-      }
-
-      const headers = message.payload.headers;
-      const subjectHeader = headers.find((h: any) => h.name === "Subject");
-      const dateHeader = headers.find((h: any) => h.name === "Date");
-      const sender =
-        headers
-          .find((h: any) => h.name === "From")
-          ?.value.replace(/<.*>/, "")
-          .replace(/"/g, "")
-          .trim() || "Unknown Sender";
-      return {
-        id: message.id,
-        sender,
-        snippet: message.snippet,
-        subject: subjectHeader ? subjectHeader.value : "",
-        date: dateHeader ? dateHeader.value : "",
-        labels: message.labelIds,
-      } as Email;
-    })
-    .filter((email): email is Email => email !== null);
-
-  return emailDetails;
-};
 
 // Example code to start the server
 const PORT = process.env.PORT || 8000;
