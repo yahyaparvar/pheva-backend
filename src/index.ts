@@ -1,6 +1,7 @@
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
+import { aiRouter } from "./routes/ai";
 import { authRouter } from "./routes/auth/auth";
 import { emailRouter } from "./routes/emails";
 
@@ -18,6 +19,7 @@ app.use(cors(corsOpts));
 
 // Route to exchange authorization code for access token
 app.use("/auth", authRouter);
+app.use("/ai", aiRouter);
 
 // Route to fetch Gmail inbox using the access token provided by the client
 app.use("/emails", emailRouter);
