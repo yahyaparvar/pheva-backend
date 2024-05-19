@@ -1,28 +1,25 @@
 import axios from "axios";
-import express, { Request, Response } from "express";
+import express from "express";
 
 export const aiRouter = express.Router();
-aiRouter.use("/emails/summary", async (req: Request, res: Response) => {
+aiRouter.post("/emails/summary", async (req, res) => {
   const { prompt } = req.body;
 
   try {
     const response = await axios.post(
-      "https://api.openai.com/v1/engines/davinci-codex/completions",
-      {
-        prompt: "what are humans?",
-        max_tokens: 100,
-      },
+      "https://api-inference.huggingface.co/models/gpt2",
+      { inputs: prompt },
       {
         headers: {
-          Authorization: `Bearer sk-proj-8Wez9pLkHP3pp3jtPcYxT3BlbkFJC6cNIGU5y387x19D2qWr`,
+          Authorization: `Bearer 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`,
           "Content-Type": "application/json",
         },
       }
     );
 
-    res.json(response);
+    res.json(response.data);
   } catch (error) {
     console.error("Error fetching AI response:", error);
-    res.status(500).json({ error });
+    res.status(500).json({ error: error });
   }
 });

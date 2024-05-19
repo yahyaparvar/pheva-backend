@@ -18,7 +18,7 @@ emailRouter.get("/inbox", async (req: Request, res: Response) => {
       "https://gmail.googleapis.com/gmail/v1/users/me/messages",
       {
         params: {
-          maxResults: 50,
+          maxResults: 24,
           pageToken: pageToken || undefined,
         },
         headers: {
