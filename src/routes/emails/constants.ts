@@ -54,7 +54,6 @@ export const fetchBatchEmailDetails = async (
 
   // Log the raw response for debugging
   const rawResponse = response.data;
-  console.log("Raw batch response:", rawResponse);
 
   // Parse the raw response and extract email details
   const emailDetails = parseMultipartResponse(rawResponse)
