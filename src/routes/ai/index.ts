@@ -14,7 +14,7 @@ aiRouter.post("/emails/summary", async (req, res) => {
   try {
     const summaries = userPrompt.map((email: Email) => ({
       id: email.id,
-      subject: email.subject,
+      summary: email.subject,
     }));
     setTimeout(() => {
       res.json({ emails: summaries });
