@@ -26,9 +26,8 @@ authRouter.post("/google", async (req: AuthRequest, res: Response) => {
   }
 });
 
-
 authRouter.post("/refresh-token", async (req: AuthRequest, res: Response) => {
-  const { code:refreshToken } = req.body;
+  const { code: refreshToken } = req.body;
 
   try {
     const response = await axios.post(
