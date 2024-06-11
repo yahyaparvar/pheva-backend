@@ -1,19 +1,32 @@
 import axios from "axios";
 import express, { Request, Response } from "express";
-import {
-  EmailRequest,
-  EmailResponse,
-  fetchBatchEmailDetails,
-} from "./constants";
+import { fetchBatchEmailDetails } from "../emails/constants";
 
 export const emailRouter = express.Router();
-emailRouter.get("/inbox", async (req: Request, res: Response) => {
-  const accessToken = (req as EmailRequest).headers.authorization?.split(
-    " "
-  )[1];
-  const pageToken = req.query.pageToken as string | undefined;
 
-  try {
+// Function to refresh access token using the refresh token
+async function refreshAccessToken(refreshToken: string): Promise<string> {
+  const response = await axios.post(
+    "https://oauth2.googleapis.com/token",
+    null,
+    {
+      params: {
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        refresh_token: refreshToken,
+        grant_type: "refresh_token",
+      },
+    }
+  );
+
+  return response.data.access_token;
+}
+
+emailRouter.get("/inbox", async (req: Request, res: Response) => {
+  let accessToken = (req as any).headers.authorization?.split(" ")[1];
+  const refreshToken = (req as any).headers["x-refresh-token"];
+  const pageToken = req.query.pageToken as string | undefined;
+  async function getInboxEmails(token: string) {
     const listResponse = await axios.get(
       "https://gmail.googleapis.com/gmail/v1/users/me/messages",
       {
@@ -22,62 +35,81 @@ emailRouter.get("/inbox", async (req: Request, res: Response) => {
           pageToken: pageToken || undefined,
         },
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
       }
     );
-
     const messageIds: string[] = listResponse.data.messages.map(
       (message: any) => message.id
     );
-
-    // Fetch email details in batch from Gmail API
-    const emailDetails = await fetchBatchEmailDetails(accessToken, messageIds);
-
-    const result: EmailResponse = {
+    const emailDetails = await fetchBatchEmailDetails(token, messageIds);
+    const result = {
       emails: emailDetails,
       nextPageToken: listResponse.data.nextPageToken,
       resultSizeEstimate: listResponse.data.resultSizeEstimate,
+      newAccessToken: accessToken,
     };
 
-    res.json(result);
+    res.status(200).json(result);
+  }
+  try {
+    await getInboxEmails(accessToken!);
   } catch (error: any) {
     console.error("Gmail API error:", error);
 
-    if (error.response && error.response.status === 401) {
-      res.status(401).json({ error: "Unauthorized: Token expired or invalid" });
+    if (error.response && error.response.status === 401 && refreshToken) {
+      try {
+        accessToken = await refreshAccessToken(refreshToken);
+        await getInboxEmails(accessToken);
+      } catch (refreshError) {
+        console.error("Token refresh error:", refreshError);
+        res
+          .status(401)
+          .json({ error: "Unauthorized: Token expired or invalid" });
+      }
     } else {
       res.status(500).json({ error: "Internal server error" });
     }
   }
 });
+
 emailRouter.get("/email/:id", async (req: Request, res: Response) => {
-  const accessToken = (req as EmailRequest).headers.authorization?.split(
-    " "
-  )[1];
+  let accessToken = (req as any).headers.authorization?.split(" ")[1];
+  const refreshToken = (req as any).headers["x-refresh-token"];
   const emailId = req.params.id;
 
-  try {
-    // Fetch email details by ID from Gmail API
+  async function getEmailDetails(token: string) {
     const emailDetailsResponse = await axios.get(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages/${emailId}`,
       {
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
       }
     );
 
     const emailDetails = emailDetailsResponse.data;
+    res.status(200).json({ emailDetails, newAccessToken: accessToken });
+  }
 
-    res.json(emailDetails);
+  try {
+    await getEmailDetails(accessToken!);
   } catch (error: any) {
     console.error("Gmail API error:", error);
 
-    if (error.response && error.response.status === 401) {
-      res.status(401).json({ error: "Unauthorized: Token expired or invalid" });
+    if (error.response && error.response.status === 401 && refreshToken) {
+      try {
+        accessToken = await refreshAccessToken(refreshToken);
+        // Retry with the new access token
+        await getEmailDetails(accessToken);
+      } catch (refreshError) {
+        console.error("Token refresh error:", refreshError);
+        res
+          .status(401)
+          .json({ error: "Unauthorized: Token expired or invalid" });
+      }
     } else if (error.response && error.response.status === 404) {
       res.status(404).json({ error: "Email not found" });
     } else {
