@@ -52,3 +52,36 @@ emailRouter.get("/inbox", async (req: Request, res: Response) => {
     }
   }
 });
+emailRouter.get("/email/:id", async (req: Request, res: Response) => {
+  const accessToken = (req as EmailRequest).headers.authorization?.split(
+    " "
+  )[1];
+  const emailId = req.params.id;
+
+  try {
+    // Fetch email details by ID from Gmail API
+    const emailDetailsResponse = await axios.get(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${emailId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+        },
+      }
+    );
+
+    const emailDetails = emailDetailsResponse.data;
+
+    res.json(emailDetails);
+  } catch (error: any) {
+    console.error("Gmail API error:", error);
+
+    if (error.response && error.response.status === 401) {
+      res.status(401).json({ error: "Unauthorized: Token expired or invalid" });
+    } else if (error.response && error.response.status === 404) {
+      res.status(404).json({ error: "Email not found" });
+    } else {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+});
