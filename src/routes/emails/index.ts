@@ -1,15 +1,15 @@
 import axios from "axios";
 import express, { Request, Response } from "express";
-import { fetchBatchEmailDetails } from "../emails/constants";
 import { refreshAccessToken } from "../auth/auth";
+import { fetchBatchEmailDetails } from "../emails/constants";
 
 export const emailRouter = express.Router();
-
 
 emailRouter.get("/inbox", async (req: Request, res: Response) => {
   let accessToken = (req as any).headers.authorization?.split(" ")[1];
   const refreshToken = (req as any).headers["x-refresh-token"];
   const pageToken = req.query.pageToken as string | undefined;
+
   async function getInboxEmails(token: string) {
     const listResponse = await axios.get(
       "https://gmail.googleapis.com/gmail/v1/users/me/messages",
@@ -37,6 +37,7 @@ emailRouter.get("/inbox", async (req: Request, res: Response) => {
 
     res.status(200).json(result);
   }
+
   try {
     await getInboxEmails(accessToken!);
   } catch (error: any) {
@@ -86,7 +87,6 @@ emailRouter.get("/email/:id", async (req: Request, res: Response) => {
     if (error.response && error.response.status === 401 && refreshToken) {
       try {
         accessToken = await refreshAccessToken(refreshToken);
-        // Retry with the new access token
         await getEmailDetails(accessToken);
       } catch (refreshError) {
         console.error("Token refresh error:", refreshError);
@@ -99,5 +99,54 @@ emailRouter.get("/email/:id", async (req: Request, res: Response) => {
     } else {
       res.status(500).json({ error: "Internal server error" });
     }
+  }
+});
+emailRouter.get("/email/:id/read", async (req: Request, res: Response) => {
+  let accessToken = (req as any).headers.authorization?.split(" ")[1];
+  const refreshToken = (req as any).headers["x-refresh-token"];
+  const emailId = req.params.id;
+
+  async function markEmailAsRead(token: string) {
+    try {
+      const modifyResponse = await axios.post(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${emailId}/modify`,
+        {
+          removeLabelIds: ["UNREAD"],
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      res
+        .status(200)
+        .json({ message: "Email marked as read", newAccessToken: accessToken });
+    } catch (error: any) {
+      console.error("Gmail API error:", error);
+      if (error.response && error.response.status === 401 && refreshToken) {
+        try {
+          accessToken = await refreshAccessToken(refreshToken);
+          await markEmailAsRead(accessToken);
+        } catch (refreshError) {
+          console.error("Token refresh error:", refreshError);
+          res
+            .status(401)
+            .json({ error: "Unauthorized: Token expired or invalid" });
+        }
+      } else if (error.response && error.response.status === 404) {
+        res.status(404).json({ error: "Email not found" });
+      } else {
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  }
+
+  try {
+    await markEmailAsRead(accessToken!);
+  } catch (error: any) {
+    res.status(500).json({ error: "Internal server error" });
   }
 });

@@ -24,41 +24,31 @@ aiRouter.post("/emails/summary", async (req, res) => {
     res.status(500).json({ error: error });
   }
 });
+aiRouter.post("/emailsDetails/summary", async (req, res) => {
+  const { prompt: userPrompt, name } = req.body;
+  const prompt = `give me info about iran in 1 line`;
 
-// aiRouter.post("/emails/summary", async (req, res) => {
-//   const { prompt: userPrompt, name } = req.body;
-//   const prompt = `
-//   Summarize the following emails in two sentences each:
-//   {emails: ${JSON.stringify(userPrompt, null, 0)}}
+  try {
+    const aiResponse = await openai.chat.completions.create({
+      messages: [{ role: "system", content: prompt }],
+      model: "gpt-3.5-turbo",
+      stream: true,
+    });
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
 
-//   Instructions:
-//   - Translate non-English emails to English.
-//   - Include key info from the snippet and sender, without repeating the subject.
-//   - Return only the email ID and summary in JSON format with the key "emails".
-//   - Summarize all emails (SUPER IMPORTANT)
-//   - Summaries must be two lines
-//   - User's name is ${name} so whenever you saw an email with that name, Put You instead of his name
-//   - Example of above instruction: You have a job update/YOUR subscription is canceled
-//   Example output:
-//   {
-//     "emails": [
-//       {
-//         "id": "email id",
-//         "summary": "Concise summary in two sentences."
-//       }
-//     ]
-//   }
-//   `;
+    for await (const part of aiResponse) {
+      let streamText = part.choices[0]?.delta?.content || "";
+      if (streamText) {
+        res.write(`${streamText}`);
+      }
+    }
 
-//   try {
-//     const gptResponse = await openai.chat.completions.create({
-//       messages: [{ role: "system", content: prompt }],
-//       model: "gpt-3.5-turbo",
-//     });
-
-//     res.json({ summaries: gptResponse.choices[0].message.content });
-//   } catch (error) {
-//     console.error("Error fetching AI response:", error);
-//     res.status(500).json({ error: error });
-//   }
-// });
+    res.write("##END##");
+    res.end();
+  } catch (error) {
+    console.error("Error fetching AI response:", error);
+    res.status(500).json({ error: error });
+  }
+});
