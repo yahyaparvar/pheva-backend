@@ -150,3 +150,71 @@ emailRouter.get("/email/:id/read", async (req: Request, res: Response) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+const encodeMessage = (
+  to: string,
+  from: string,
+  subject: string,
+  message: string
+) => {
+  const email = [
+    `To: ${to}`,
+    `From: ${from}`,
+    `Subject: ${subject}`,
+    "",
+    message,
+  ].join("\n");
+
+  const encodedMessage = Buffer.from(email)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  return encodedMessage;
+};
+emailRouter.post("/send", async (req: Request, res: Response) => {
+  let accessToken = (req as any).headers.authorization?.split(" ")[1];
+  const refreshToken = (req as any).headers["x-refresh-token"];
+  const { to, from, subject, message } = req.body;
+
+  const sendEmail = async (token: string) => {
+    const encodedMessage = encodeMessage(to, from, subject, message);
+
+    try {
+      const response = await axios.post(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+        {
+          raw: encodedMessage,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }
+      );
+      res.status(200).json({ message: "Email sent successfully" });
+    } catch (error) {
+      console.error("Gmail API error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  };
+
+  try {
+    await sendEmail(accessToken!);
+  } catch (error: any) {
+    console.error("Gmail API error:", error);
+    if (error.response && error.response.status === 401 && refreshToken) {
+      try {
+        accessToken = await refreshAccessToken(refreshToken);
+        await sendEmail(accessToken);
+      } catch (refreshError) {
+        console.error("Token refresh error:", refreshError);
+        res
+          .status(401)
+          .json({ error: "Unauthorized: Token expired or invalid" });
+      }
+    } else {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+});
