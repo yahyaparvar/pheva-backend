@@ -150,27 +150,30 @@ emailRouter.get("/email/:id/read", async (req: Request, res: Response) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 const encodeMessage = (
   to: string,
   from: string,
   subject: string,
-  message: string
+  htmlMessage: string
 ) => {
-  const email = [
-    `To: ${to}`,
+  const str = [
+    `Content-Type: text/html; charset=UTF-8`,
+    `MIME-Version: 1.0`,
     `From: ${from}`,
+    `To: ${to}`,
     `Subject: ${subject}`,
     "",
-    message,
-  ].join("\n");
+    `${htmlMessage}`,
+  ].join("\r\n");
 
-  const encodedMessage = Buffer.from(email)
+  return Buffer.from(str)
     .toString("base64")
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
-  return encodedMessage;
 };
+
 emailRouter.post("/send", async (req: Request, res: Response) => {
   let accessToken = (req as any).headers.authorization?.split(" ")[1];
   const refreshToken = (req as any).headers["x-refresh-token"];
@@ -189,6 +192,7 @@ emailRouter.post("/send", async (req: Request, res: Response) => {
           headers: {
             Authorization: `Bearer ${token}`,
             Accept: "application/json",
+            "Content-Type": "application/json",
           },
         }
       );
@@ -218,3 +222,5 @@ emailRouter.post("/send", async (req: Request, res: Response) => {
     }
   }
 });
+
+export default emailRouter;
