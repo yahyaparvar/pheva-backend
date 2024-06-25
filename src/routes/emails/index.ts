@@ -17,6 +17,7 @@ emailRouter.get("/inbox", async (req: Request, res: Response) => {
         params: {
           maxResults: 24,
           pageToken: pageToken || undefined,
+          q: 'in:"inbox"',
         },
         headers: {
           Authorization: `Bearer ${token}`,
@@ -47,6 +48,60 @@ emailRouter.get("/inbox", async (req: Request, res: Response) => {
       try {
         accessToken = await refreshAccessToken(refreshToken);
         await getInboxEmails(accessToken);
+      } catch (refreshError) {
+        console.error("Token refresh error:", refreshError);
+        res
+          .status(401)
+          .json({ error: "Unauthorized: Token expired or invalid" });
+      }
+    } else {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+});
+emailRouter.get("/sent", async (req: Request, res: Response) => {
+  let accessToken = (req as any).headers.authorization?.split(" ")[1];
+  const refreshToken = (req as any).headers["x-refresh-token"];
+  const pageToken = req.query.pageToken as string | undefined;
+
+  async function getSentEmails(token: string) {
+    const listResponse = await axios.get(
+      "https://gmail.googleapis.com/gmail/v1/users/me/messages",
+      {
+        params: {
+          maxResults: 24,
+          pageToken: pageToken || undefined,
+          q: 'in:"sent"',
+        },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      }
+    );
+    const messageIds: string[] = listResponse.data.messages.map(
+      (message: any) => message.id
+    );
+    const emailDetails = await fetchBatchEmailDetails(token, messageIds);
+    const result = {
+      emails: emailDetails,
+      nextPageToken: listResponse.data.nextPageToken,
+      resultSizeEstimate: listResponse.data.resultSizeEstimate,
+      newAccessToken: accessToken,
+    };
+
+    res.status(200).json(result);
+  }
+
+  try {
+    await getSentEmails(accessToken!);
+  } catch (error: any) {
+    console.error("Gmail API error:", error);
+
+    if (error.response && error.response.status === 401 && refreshToken) {
+      try {
+        accessToken = await refreshAccessToken(refreshToken);
+        await getSentEmails(accessToken);
       } catch (refreshError) {
         console.error("Token refresh error:", refreshError);
         res
@@ -223,4 +278,4 @@ emailRouter.post("/send", async (req: Request, res: Response) => {
   }
 });
 
-export default emailRouter; 
+export default emailRouter;
