@@ -120,42 +120,70 @@ emailRouter.get("/email/:id", async (req: Request, res: Response) => {
   const emailId = req.params.id;
 
   async function getEmailDetails(token: string) {
-    const emailDetailsResponse = await axios.get(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${emailId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-      }
-    );
+    try {
+      // Fetch the email message details
+      const emailDetailsResponse = await axios.get(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${emailId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }
+      );
 
-    const emailDetails = emailDetailsResponse.data;
-    res.status(200).json({ emailDetails, newAccessToken: accessToken });
+      const emailDetails = emailDetailsResponse.data;
+      const threadId = emailDetails.threadId;
+
+      // Fetch the entire thread
+      const threadDetailsResponse = await axios.get(
+        `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      const threadDetails = threadDetailsResponse.data;
+
+      // Separate the main email from the thread messages
+      const threadMessages = threadDetails.messages.filter(
+        (message: any) => message.id !== emailId
+      );
+
+      res
+        .status(200)
+        .json({ emailDetails, threadMessages, newAccessToken: accessToken });
+    } catch (error: any) {
+      console.error("Gmail API error:", error);
+
+      if (error.response && error.response.status === 401 && refreshToken) {
+        try {
+          accessToken = await refreshAccessToken(refreshToken);
+          await getEmailDetails(accessToken);
+        } catch (refreshError) {
+          console.error("Token refresh error:", refreshError);
+          res
+            .status(401)
+            .json({ error: "Unauthorized: Token expired or invalid" });
+        }
+      } else if (error.response && error.response.status === 404) {
+        res.status(404).json({ error: "Email not found" });
+      } else {
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
   }
 
   try {
     await getEmailDetails(accessToken!);
   } catch (error: any) {
-    console.error("Gmail API error:", error);
-
-    if (error.response && error.response.status === 401 && refreshToken) {
-      try {
-        accessToken = await refreshAccessToken(refreshToken);
-        await getEmailDetails(accessToken);
-      } catch (refreshError) {
-        console.error("Token refresh error:", refreshError);
-        res
-          .status(401)
-          .json({ error: "Unauthorized: Token expired or invalid" });
-      }
-    } else if (error.response && error.response.status === 404) {
-      res.status(404).json({ error: "Email not found" });
-    } else {
-      res.status(500).json({ error: "Internal server error" });
-    }
+    res.status(500).json({ error: "Internal server error" });
   }
 });
+
 emailRouter.get("/email/:id/read", async (req: Request, res: Response) => {
   let accessToken = (req as any).headers.authorization?.split(" ")[1];
   const refreshToken = (req as any).headers["x-refresh-token"];
@@ -210,14 +238,25 @@ const encodeMessage = (
   to: string,
   from: string,
   subject: string,
-  htmlMessage: string
+  htmlMessage: string,
+  threadId?: string,
+  messageId?: string
 ) => {
-  const str = [
+  const headers = [
     `Content-Type: text/html; charset=UTF-8`,
     `MIME-Version: 1.0`,
     `From: ${from}`,
     `To: ${to}`,
     `Subject: ${subject}`,
+  ];
+
+  if (threadId && messageId) {
+    headers.push(`In-Reply-To: <${messageId}>`);
+    headers.push(`References: <${messageId}>`);
+  }
+
+  const str = [
+    ...headers,
     "",
     `${htmlMessage}`,
   ].join("\r\n");
@@ -228,7 +267,53 @@ const encodeMessage = (
     .replace(/\//g, "_")
     .replace(/=+$/, "");
 };
+emailRouter.post("/send/reply", async (req: Request, res: Response) => {
+  let accessToken = (req as any).headers.authorization?.split(" ")[1];
+  const refreshToken = (req as any).headers["x-refresh-token"];
+  const { to, from, subject, message, threadId, messageId } = req.body;  // Added threadId and messageId
 
+  const sendEmail = async (token: string) => {
+    const encodedMessage = encodeMessage(to, from, subject, message, threadId, messageId);  // Pass threadId and messageId
+
+    try {
+      const response = await axios.post(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+        {
+          raw: encodedMessage,
+          threadId: threadId,  // Include the threadId in the payload
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      res.status(200).json({ message: "Email sent successfully" });
+    } catch (error) {
+      console.error("Gmail API error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  };
+
+  try {
+    await sendEmail(accessToken!);
+  } catch (error: any) {
+    console.error("Gmail API error:", error);
+    if (error.response && error.response.status === 401 && refreshToken) {
+      try {
+        accessToken = await refreshAccessToken(refreshToken);
+        await sendEmail(accessToken);
+      } catch (refreshError) {
+        console.error("Token refresh error:", refreshError);
+        res.status(401).json({ error: "Unauthorized: Token expired or invalid" });
+      }
+    } else {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+});
 emailRouter.post("/send", async (req: Request, res: Response) => {
   let accessToken = (req as any).headers.authorization?.split(" ")[1];
   const refreshToken = (req as any).headers["x-refresh-token"];

@@ -15,6 +15,7 @@ export interface Email {
   subject: string;
   date: string;
   labels: string[];
+  threadLength: number;
 }
 
 export interface EmailResponse {
@@ -22,6 +23,7 @@ export interface EmailResponse {
   nextPageToken: string | undefined;
   resultSizeEstimate: number;
 }
+
 export const fetchBatchEmailDetails = async (
   accessToken: string,
   emailIds: string[]
@@ -35,7 +37,7 @@ export const fetchBatchEmailDetails = async (
           `--${boundary}`,
           "Content-Type: application/http",
           "",
-          `GET /gmail/v1/users/me/messages/${id}?fields=id,labelIds,snippet,payload(headers)`,
+          `GET /gmail/v1/users/me/messages/${id}?fields=id,labelIds,snippet,payload(headers),threadId`,
           "",
         ].join("\r\n");
       })
@@ -56,8 +58,8 @@ export const fetchBatchEmailDetails = async (
   const rawResponse = response.data;
 
   // Parse the raw response and extract email details
-  const emailDetails = parseMultipartResponse(rawResponse)
-    .map((message: any) => {
+  const emailDetails = await Promise.all(
+    parseMultipartResponse(rawResponse).map(async (message: any) => {
       if (!message.payload || !message.payload.headers) {
         console.error("Missing payload or headers in message:", message);
         return null;
@@ -66,12 +68,40 @@ export const fetchBatchEmailDetails = async (
       const headers = message.payload.headers;
       const subjectHeader = headers.find((h: any) => h.name === "Subject");
       const dateHeader = headers.find((h: any) => h.name === "Date");
+      const fromHeader = headers.find((h: any) => h.name === "From");
+
+      if (!subjectHeader || !dateHeader || !fromHeader) {
+        console.error("Missing essential headers in message:", message);
+        return null;
+      }
+
       const sender =
-        headers
-          .find((h: any) => h.name === "From")
-          ?.value.replace(/<.*>/, "")
-          .replace(/"/g, "")
-          .trim() || "Unknown Sender";
+        fromHeader.value.replace(/<.*>/, "").replace(/"/g, "").trim() ||
+        "Unknown Sender";
+      const threadId = message.threadId;
+      let threadLength = 0;
+
+      if (threadId) {
+        try {
+          const threadResponse = await axios.get(
+            `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}`,
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                Accept: "application/json",
+              },
+            }
+          );
+          threadLength = threadResponse.data.messages.length;
+        } catch (threadError) {
+          console.error(
+            "Error fetching thread length for message:",
+            message.id,
+            threadError
+          );
+        }
+      }
+
       return {
         id: message.id,
         sender,
@@ -79,9 +109,10 @@ export const fetchBatchEmailDetails = async (
         subject: subjectHeader ? subjectHeader.value : "",
         date: dateHeader ? dateHeader.value : "",
         labels: message.labelIds,
+        threadLength: threadLength,
       } as Email;
     })
-    .filter((email): email is Email => email !== null);
+  );
 
-  return emailDetails;
+  return emailDetails.filter((email): email is Email => email !== null);
 };
