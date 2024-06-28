@@ -4,7 +4,6 @@ import { refreshAccessToken } from "../auth/auth";
 import { fetchBatchEmailDetails } from "../emails/constants";
 
 export const emailRouter = express.Router();
-
 emailRouter.get("/inbox", async (req: Request, res: Response) => {
   let accessToken = (req as any).headers.authorization?.split(" ")[1];
   const refreshToken = (req as any).headers["x-refresh-token"];
@@ -25,10 +24,13 @@ emailRouter.get("/inbox", async (req: Request, res: Response) => {
         },
       }
     );
+
     const messageIds: string[] = listResponse.data.messages.map(
       (message: any) => message.id
     );
+
     const emailDetails = await fetchBatchEmailDetails(token, messageIds);
+
     const result = {
       emails: emailDetails,
       nextPageToken: listResponse.data.nextPageToken,
@@ -59,6 +61,7 @@ emailRouter.get("/inbox", async (req: Request, res: Response) => {
     }
   }
 });
+
 emailRouter.get("/sent", async (req: Request, res: Response) => {
   let accessToken = (req as any).headers.authorization?.split(" ")[1];
   const refreshToken = (req as any).headers["x-refresh-token"];
@@ -72,6 +75,60 @@ emailRouter.get("/sent", async (req: Request, res: Response) => {
           maxResults: 24,
           pageToken: pageToken || undefined,
           q: 'in:"sent"',
+        },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      }
+    );
+    const messageIds: string[] = listResponse.data.messages.map(
+      (message: any) => message.id
+    );
+    const emailDetails = await fetchBatchEmailDetails(token, messageIds);
+    const result = {
+      emails: emailDetails,
+      nextPageToken: listResponse.data.nextPageToken,
+      resultSizeEstimate: listResponse.data.resultSizeEstimate,
+      newAccessToken: accessToken,
+    };
+
+    res.status(200).json(result);
+  }
+
+  try {
+    await getSentEmails(accessToken!);
+  } catch (error: any) {
+    console.error("Gmail API error:", error);
+
+    if (error.response && error.response.status === 401 && refreshToken) {
+      try {
+        accessToken = await refreshAccessToken(refreshToken);
+        await getSentEmails(accessToken);
+      } catch (refreshError) {
+        console.error("Token refresh error:", refreshError);
+        res
+          .status(401)
+          .json({ error: "Unauthorized: Token expired or invalid" });
+      }
+    } else {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+});
+emailRouter.get("/spam", async (req: Request, res: Response) => {
+  let accessToken = (req as any).headers.authorization?.split(" ")[1];
+  const refreshToken = (req as any).headers["x-refresh-token"];
+  const pageToken = req.query.pageToken as string | undefined;
+
+  async function getSentEmails(token: string) {
+    const listResponse = await axios.get(
+      "https://gmail.googleapis.com/gmail/v1/users/me/messages",
+      {
+        params: {
+          maxResults: 24,
+          pageToken: pageToken || undefined,
+          q: 'in:"spam"',
         },
         headers: {
           Authorization: `Bearer ${token}`,
@@ -255,11 +312,7 @@ const encodeMessage = (
     headers.push(`References: <${messageId}>`);
   }
 
-  const str = [
-    ...headers,
-    "",
-    `${htmlMessage}`,
-  ].join("\r\n");
+  const str = [...headers, "", `${htmlMessage}`].join("\r\n");
 
   return Buffer.from(str)
     .toString("base64")
@@ -270,17 +323,24 @@ const encodeMessage = (
 emailRouter.post("/send/reply", async (req: Request, res: Response) => {
   let accessToken = (req as any).headers.authorization?.split(" ")[1];
   const refreshToken = (req as any).headers["x-refresh-token"];
-  const { to, from, subject, message, threadId, messageId } = req.body;  // Added threadId and messageId
+  const { to, from, subject, message, threadId, messageId } = req.body; // Added threadId and messageId
 
   const sendEmail = async (token: string) => {
-    const encodedMessage = encodeMessage(to, from, subject, message, threadId, messageId);  // Pass threadId and messageId
+    const encodedMessage = encodeMessage(
+      to,
+      from,
+      subject,
+      message,
+      threadId,
+      messageId
+    ); // Pass threadId and messageId
 
     try {
       const response = await axios.post(
         "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
         {
           raw: encodedMessage,
-          threadId: threadId,  // Include the threadId in the payload
+          threadId: threadId, // Include the threadId in the payload
         },
         {
           headers: {
@@ -307,7 +367,9 @@ emailRouter.post("/send/reply", async (req: Request, res: Response) => {
         await sendEmail(accessToken);
       } catch (refreshError) {
         console.error("Token refresh error:", refreshError);
-        res.status(401).json({ error: "Unauthorized: Token expired or invalid" });
+        res
+          .status(401)
+          .json({ error: "Unauthorized: Token expired or invalid" });
       }
     } else {
       res.status(500).json({ error: "Internal server error" });

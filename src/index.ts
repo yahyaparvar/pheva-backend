@@ -5,6 +5,7 @@ import { aiRouter } from "./routes/ai";
 import { authRouter } from "./routes/auth/auth";
 import { calendarRouter } from "./routes/calendar/calendar";
 import { emailRouter } from "./routes/emails";
+import { homeRouter } from "./routes/home";
 
 dotenv.config();
 
@@ -17,6 +18,7 @@ const corsOpts = {
 };
 
 app.use(cors(corsOpts));
+app.use("/home", homeRouter);
 app.use("/auth", authRouter);
 app.use("/ai", aiRouter);
 app.use("/emails", emailRouter);
