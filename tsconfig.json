@@ -4,11 +4,11 @@
     "moduleResolution": "NodeNext",
     "target": "es6",
     "sourceMap": true,
-    "rootDir": "./src",
+    "rootDir": "./",
     "outDir": "dist",
     "strict": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "./api/*.ts"]
 }
