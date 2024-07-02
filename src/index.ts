@@ -18,8 +18,10 @@ const corsOpts = {
   allowedHeaders: ["Content-Type", "Authorization"], // Adjust headers as necessary
 };
 
-
 app.use(cors(corsOpts));
+app.use("/", (req, res) => {
+  res.send("Deployed successfully");
+});
 app.use("/home", homeRouter);
 app.use("/auth", authRouter);
 app.use("/ai", aiRouter);
