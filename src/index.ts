@@ -13,16 +13,18 @@ const app = express();
 app.use(express.json());
 
 const corsOpts = {
-  origin: "https://pheva.vercel.app", // Replace with your frontend URL
+  origin: "*",
   methods: ["GET", "POST"],
-  allowedHeaders: ["Content-Type", "Authorization"], // Adjust headers as necessary
 };
+export const mainRouter = express.Router();
+
+mainRouter.get("/", async (req, res) => {
+  res.json({ deployed: true });
+});
 
 app.use(cors(corsOpts));
-app.use("/", (req, res) => {
-  res.send("Deployed successfully");
-});
 app.use("/home", homeRouter);
+app.use("/", mainRouter);
 app.use("/auth", authRouter);
 app.use("/ai", aiRouter);
 app.use("/emails", emailRouter);
