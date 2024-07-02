@@ -13,9 +13,11 @@ const app = express();
 app.use(express.json());
 
 const corsOpts = {
-  origin: "*", //TODO:CHANGE
+  origin: "https://pheva.vercel.app", // Replace with your frontend URL
   methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type", "Authorization"], // Adjust headers as necessary
 };
+
 
 app.use(cors(corsOpts));
 app.use("/home", homeRouter);
