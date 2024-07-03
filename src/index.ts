@@ -1,6 +1,6 @@
 import cors from "cors";
 import dotenv from "dotenv";
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import { aiRouter } from "./routes/ai";
 import { authRouter } from "./routes/auth/auth";
 import { calendarRouter } from "./routes/calendar/calendar";
@@ -29,6 +29,14 @@ app.use("/auth", authRouter);
 app.use("/ai", aiRouter);
 app.use("/emails", emailRouter);
 app.use("/calendar", calendarRouter);
+
+// Set timeout to infinity
+const timeout = 0;
+app.use((req: Request, res: Response, next: NextFunction) => {
+  req.setTimeout(timeout, next);
+  next();
+});
+
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
